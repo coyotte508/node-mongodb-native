@@ -1,11 +1,6 @@
 import { OneOrMore } from './src/mongo_types';
 import type { TestConfiguration } from './test/tools/runner/config';
 
-type WithExclusion<T extends string> = `!${T}`;
-/** Defined in test/tools/runner/filters/mongodb_topology_filter.js (topologyTypeToString) */
-type TopologyTypes = 'single' | 'replicaset' | 'sharded' | 'load-balanced';
-type TopologyTypeRequirement = OneOrMore<TopologyTypes> | OneOrMore<WithExclusion<TopologyTypes>>;
-
 declare global {
   interface MongoDBMetadataUI {
     requires?: {
@@ -22,6 +17,11 @@ declare global {
       skipLeakTests?: boolean;
     };
   }
+
+  type WithExclusion<T extends string> = `!${T}`;
+  /** Defined in test/tools/runner/filters/mongodb_topology_filter.js (topologyTypeToString) */
+  type TopologyTypes = 'single' | 'replicaset' | 'sharded' | 'load-balanced';
+  type TopologyTypeRequirement = OneOrMore<TopologyTypes> | OneOrMore<WithExclusion<TopologyTypes>>;
 
   interface MetadataAndTest<Fn> {
     metadata: MongoDBMetadataUI;

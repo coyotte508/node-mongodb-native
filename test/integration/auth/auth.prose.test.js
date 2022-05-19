@@ -4,7 +4,7 @@ const sinon = require('sinon');
 const { expect } = require('chai');
 const { Connection } = require('../../../src/cmap/connection');
 const { ScramSHA256 } = require('../../../src/cmap/auth/scram');
-const { setupDatabase, withClient } = require('../shared');
+const { setupDatabase } = require('../shared');
 const { LEGACY_HELLO_COMMAND } = require('../../../src/constants');
 
 describe('auth prose tests', () => {
@@ -49,30 +49,30 @@ describe('auth prose tests', () => {
        * Step 1
        * Create three test users, one with only SHA-1, one with only SHA-256 and one with both.
        */
-      before(function () {
-        return withClient(this.configuration.newClient(), client => {
-          test.oldDbName = this.configuration.db;
-          this.configuration.db = 'admin';
-          const db = client.db(this.configuration.db);
+      before(async function () {
+        const client = this.configuration.newClient();
+        test.oldDbName = this.configuration.db;
+        this.configuration.db = 'admin';
+        const db = client.db(this.configuration.db);
 
-          const createUserCommands = users.map(user => ({
-            createUser: user.username,
-            pwd: user.password,
-            roles: ['root'],
-            mechanisms: user.mechanisms
-          }));
+        const createUserCommands = users.map(user => ({
+          createUser: user.username,
+          pwd: user.password,
+          roles: ['root'],
+          mechanisms: user.mechanisms
+        }));
 
-          return Promise.all(createUserCommands.map(cmd => db.command(cmd)));
-        });
+        await Promise.all(createUserCommands.map(cmd => db.command(cmd)));
+        await client.close();
       });
 
-      after(function () {
-        return withClient(this.configuration.newClient(), client => {
-          const db = client.db(this.configuration.db);
-          this.configuration.db = test.oldDbName;
+      after(async function () {
+        const client = this.configuration.newClient();
+        const db = client.db(this.configuration.db);
+        this.configuration.db = test.oldDbName;
 
-          return Promise.all(users.map(user => db.removeUser(user.username)));
-        });
+        await Promise.all(users.map(user => db.removeUser(user.username)));
+        await client.close();
       });
 
       /**
@@ -86,7 +86,7 @@ describe('auth prose tests', () => {
         user.mechanisms.forEach(mechanism => {
           it(`should auth ${user.description} when explicitly specifying ${mechanism}`, {
             metadata: { requires: { mongodb: '>=3.7.3' } },
-            test: function () {
+            test: async function () {
               const options = {
                 auth: {
                   username: user.username,
@@ -96,15 +96,15 @@ describe('auth prose tests', () => {
                 authSource: this.configuration.db
               };
 
-              return withClient(this.configuration.newClient({}, options), client => {
-                return client.db(this.configuration.db).stats();
-              });
+              const client = this.configuration.newClient({}, options);
+              await client.db(this.configuration.db).stats();
+              await client.close();
             }
           });
 
           it(`should auth ${user.description} when explicitly specifying ${mechanism} in url`, {
             metadata: { requires: { mongodb: '>=3.7.3' } },
-            test: function () {
+            test: async function () {
               const username = encodeURIComponent(user.username);
               const password = encodeURIComponent(user.password);
 
@@ -116,16 +116,15 @@ describe('auth prose tests', () => {
 
               const client = this.configuration.newClient(url);
 
-              return withClient(client, client => {
-                return client.db(this.configuration.db).stats();
-              });
+              await client.db(this.configuration.db).stats();
+              await client.close();
             }
           });
         });
 
         it(`should auth ${user.description} using mechanism negotiaton`, {
           metadata: { requires: { mongodb: '>=3.7.3' } },
-          test: function () {
+          test: async function () {
             const options = {
               auth: {
                 username: user.username,
@@ -134,24 +133,23 @@ describe('auth prose tests', () => {
               authSource: this.configuration.db
             };
 
-            return withClient(this.configuration.newClient({}, options), client => {
-              return client.db(this.configuration.db).stats();
-            });
+            const client = this.configuration.newClient({}, options);
+            await client.db(this.configuration.db).stats();
+            await client.close();
           }
         });
 
         it(`should auth ${user.description} using mechanism negotiaton and url`, {
           metadata: { requires: { mongodb: '>=3.7.3' } },
-          test: function () {
+          test: async function () {
             const username = encodeURIComponent(user.username);
             const password = encodeURIComponent(user.password);
             const url = makeConnectionString(this.configuration, username, password);
 
             const client = this.configuration.newClient(url);
 
-            return withClient(client, client => {
-              return client.db(this.configuration.db).stats();
-            });
+            await client.db(this.configuration.db).stats();
+            await client.close();
           }
         });
       });
@@ -163,7 +161,7 @@ describe('auth prose tests', () => {
        */
       it('should select SCRAM-SHA-256 for a user that supports both auth mechanisms', {
         metadata: { requires: { mongodb: '>=3.7.3' } },
-        test: function () {
+        test: async function () {
           const options = {
             auth: {
               username: userMap.both.username,
@@ -174,16 +172,17 @@ describe('auth prose tests', () => {
 
           test.sandbox.spy(ScramSHA256.prototype, 'auth');
 
-          return withClient(this.configuration.newClient({}, options), () => {
-            expect(ScramSHA256.prototype.auth.called).to.equal(true);
-          });
+          const client = this.configuration.newClient({}, options);
+          await client.db().command({ ping: 1 });
+          expect(ScramSHA256.prototype.auth.called).to.equal(true);
+          await client.close();
         }
       });
 
       // TODO: not spec
       it('should shorten SCRAM conversations if the server supports it', {
         metadata: { requires: { mongodb: '>=4.4', topology: ['single'] } },
-        test: function () {
+        test: async function () {
           const options = {
             auth: {
               username: userMap.both.username,
@@ -207,9 +206,10 @@ describe('auth prose tests', () => {
               auth.apply(this, [authContext, _callback]);
             });
 
-          return withClient(this.configuration.newClient({}, options), () => {
-            expect(runCommandSpy.callCount).to.equal(1);
-          });
+          const client = this.configuration.newClient({}, options);
+          await client.db().command({ ping: 1 });
+          expect(runCommandSpy.callCount).to.equal(1);
+          await client.close();
         }
       });
 
@@ -219,7 +219,7 @@ describe('auth prose tests', () => {
        */
       it('should fail to connect if incorrect auth mechanism is explicitly specified', {
         metadata: { requires: { mongodb: '>=3.7.3' } },
-        test: function () {
+        test: async function () {
           const options = {
             auth: {
               username: userMap.sha256.username,
@@ -229,11 +229,13 @@ describe('auth prose tests', () => {
             authMechanism: 'SCRAM-SHA-1'
           };
 
-          return withClient(
-            this.configuration.newClient({}, options),
-            () => Promise.reject(new Error('This request should have failed to authenticate')),
-            err => expect(err).to.match(/Authentication failed/)
-          );
+          const client = this.configuration.newClient({}, options);
+          const error = await client
+            .db()
+            .command({ ping: 1 })
+            .catch(error => error);
+          expect(error.message).to.match(/Authentication failed/);
+          await client.close();
         }
       });
 
@@ -248,7 +250,7 @@ describe('auth prose tests', () => {
        */
       it('should fail for a nonexistent username with same error type as bad password', {
         metadata: { requires: { mongodb: '>=3.7.3' } },
-        test: function () {
+        test: async function () {
           const noUsernameOptions = {
             auth: {
               username: 'roth',
@@ -265,20 +267,27 @@ describe('auth prose tests', () => {
             authSource: 'admin'
           };
 
-          const getErrorMsg = options =>
-            withClient(
-              this.configuration.newClient({}, options),
-              () => Promise.reject(new Error('This request should have failed to authenticate')),
-              err => expect(err).to.match(/Authentication failed/)
-            );
+          const noUsernameClient = this.configuration.newClient({}, noUsernameOptions);
+          const errorNoUser = await noUsernameClient
+            .db()
+            .command({ ping: 1 })
+            .catch(error => error);
+          expect(errorNoUser.message).to.match(/Authentication failed/);
+          await noUsernameClient.close();
 
-          return Promise.all([getErrorMsg(noUsernameOptions), getErrorMsg(badPasswordOptions)]);
+          const badPasswordClient = this.configuration.newClient({}, badPasswordOptions);
+          const errorNoPass = await badPasswordClient
+            .db()
+            .command({ ping: 1 })
+            .catch(error => error);
+          expect(errorNoPass.message).to.match(/Authentication failed/);
+          await badPasswordClient.close();
         }
       });
 
       it('should send speculativeAuthenticate on initial handshake on MongoDB 4.4+', {
         metadata: { requires: { mongodb: '>=4.4', topology: ['single'] } },
-        test: function () {
+        test: async function () {
           const options = {
             auth: {
               username: userMap.both.username,
@@ -288,16 +297,17 @@ describe('auth prose tests', () => {
           };
 
           const commandSpy = test.sandbox.spy(Connection.prototype, 'command');
-          return withClient(this.configuration.newClient({}, options), () => {
-            const calls = commandSpy
-              .getCalls()
-              .filter(c => c.thisValue.id !== '<monitor>') // ignore all monitor connections
-              .filter(c => c.args[1][LEGACY_HELLO_COMMAND]); // only consider handshakes
+          const client = this.configuration.newClient({}, options);
+          await client.db().command({ ping: 1 });
+          const calls = commandSpy
+            .getCalls()
+            .filter(c => c.thisValue.id !== '<monitor>') // ignore all monitor connections
+            .filter(c => c.args[1][LEGACY_HELLO_COMMAND]); // only consider handshakes
 
-            expect(calls).to.have.length(1);
-            const handshakeDoc = calls[0].args[1];
-            expect(handshakeDoc).to.have.property('speculativeAuthenticate');
-          });
+          expect(calls).to.have.length(1);
+          const handshakeDoc = calls[0].args[1];
+          expect(handshakeDoc).to.have.property('speculativeAuthenticate');
+          await client.close();
         }
       });
     });
@@ -337,27 +347,27 @@ describe('auth prose tests', () => {
         return setupDatabase(this.configuration);
       });
 
-      before(function () {
-        return withClient(this.configuration.newClient(), client => {
-          const db = client.db('admin');
+      before(async function () {
+        const client = this.configuration.newClient();
+        const db = client.db('admin');
 
-          const createUserCommands = users.map(user => ({
-            createUser: user.username,
-            pwd: user.password,
-            roles: ['root'],
-            mechanisms: user.mechanisms
-          }));
+        const createUserCommands = users.map(user => ({
+          createUser: user.username,
+          pwd: user.password,
+          roles: ['root'],
+          mechanisms: user.mechanisms
+        }));
 
-          return Promise.all(createUserCommands.map(cmd => db.command(cmd)));
-        });
+        await Promise.all(createUserCommands.map(cmd => db.command(cmd)));
+
+        await client.close();
       });
 
-      after(function () {
-        return withClient(this.configuration.newClient(), client => {
-          const db = client.db('admin');
-
-          return Promise.all(users.map(user => db.removeUser(user.username)));
-        });
+      after(async function () {
+        const client = this.configuration.newClient();
+        const db = client.db('admin');
+        await Promise.all(users.map(user => db.removeUser(user.username)));
+        await client.close();
       });
 
       [
@@ -374,16 +384,16 @@ describe('auth prose tests', () => {
               mongodb: '>=3.7.3'
             }
           },
-          test: function () {
+          test: async function () {
             const options = {
               auth: { username, password },
               authSource: 'admin',
               authMechanism: 'SCRAM-SHA-256'
             };
 
-            return withClient(this.configuration.newClient(options), client => {
-              return client.db('admin').stats();
-            });
+            const client = this.configuration.newClient({}, options);
+            await client.db('admin').stats();
+            await client.close();
           }
         });
       });

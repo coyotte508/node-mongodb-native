@@ -3,7 +3,7 @@ import { expect } from 'chai';
 import type { MongoClient } from '../../../src';
 import { LEGACY_HELLO_COMMAND } from '../../../src/constants';
 import { MongoServerError } from '../../../src/error';
-import { setupDatabase, withMonitoredClient } from '../shared';
+import { setupDatabase } from '../shared';
 
 const ignoredCommands = [LEGACY_HELLO_COMMAND];
 let hasInitialPingOccurred = false;
@@ -40,6 +40,15 @@ const test = {
 };
 
 describe('Sessions Spec', function () {
+  let client: MongoClient;
+  beforeEach(async function () {
+    client = this.configuration.newClient({ monitorCommands: true });
+  });
+
+  afterEach(async function () {
+    await client.close();
+  });
+
   describe('Sessions - functional - old format', function () {
     before(function () {
       return setupDatabase(this.configuration);
@@ -56,19 +65,15 @@ describe('Sessions Spec', function () {
           // Skipping session leak tests b/c these are explicit sessions
           sessions: { skipLeakTests: true }
         },
-        test: function (done) {
+        test: async function () {
           const client = test.client;
           const sessions = [client.startSession(), client.startSession()].map(s => s.id);
 
-          client.close(err => {
-            expect(err).to.not.exist;
-            expect(test.commands.started).to.have.length(1);
-            expect(test.commands.started[0].commandName).to.equal('endSessions');
-            expect(test.commands.started[0].command.endSessions).to.include.deep.members(sessions);
-            expect(client.s.sessions.size).to.equal(0);
-
-            done();
-          });
+          await client.close();
+          expect(test.commands.started).to.have.length(1);
+          expect(test.commands.started[0].commandName).to.equal('endSessions');
+          expect(test.commands.started[0].command.endSessions).to.include.deep.members(sessions);
+          expect(client.s.sessions.size).to.equal(0);
         }
       });
     });
@@ -183,42 +188,48 @@ describe('Sessions Spec', function () {
     context('unacknowledged writes', () => {
       it('should not include session for unacknowledged writes', {
         metadata: { requires: { topology: 'single', mongodb: '>=3.6.0' } },
-        test: withMonitoredClient(
-          'insert',
-          { clientOptions: { writeConcern: { w: 0 } } },
-          function (client, events, done) {
-            client
-              .db('test')
-              .collection('foo')
-              .insertOne({ foo: 'bar' }, err => {
-                expect(err).to.not.exist;
-                const event = events[0];
-                expect(event).nested.property('command.writeConcern.w').to.equal(0);
-                expect(event).to.not.have.nested.property('command.lsid');
-                done();
-              });
-          }
-        )
+        test: function (done) {
+          const events = [];
+          client.on('commandStarted', event => {
+            if (event.commandName === 'insert') {
+              events.push(event);
+            }
+          });
+          client
+            .db('test')
+            .collection('foo')
+            .insertOne({ foo: 'bar' }, err => {
+              expect(err).to.not.exist;
+              const event = events[0];
+              expect(event).nested.property('command.writeConcern.w').to.equal(0);
+              expect(event).to.not.have.nested.property('command.lsid');
+              done();
+            });
+        }
       });
       it('should throw error with explicit session', {
         metadata: { requires: { topology: 'replicaset', mongodb: '>=3.6.0' } },
-        test: withMonitoredClient(
-          'insert',
-          { clientOptions: { writeConcern: { w: 0 } } },
-          function (client, events, done) {
-            const session = client.startSession({ causalConsistency: true });
-            client
-              .db('test')
-              .collection('foo')
-              .insertOne({ foo: 'bar' }, { session }, err => {
-                expect(err).to.exist;
-                expect(err.message).to.equal(
-                  'Cannot have explicit session with unacknowledged writes'
-                );
-                client.close(done);
-              });
-          }
-        )
+        test: async function () {
+          const events = [];
+          client.on('commandStarted', event => {
+            if (event.commandName === 'insert') {
+              events.push(event);
+            }
+          });
+
+          await client.db().command({ ping: 1 });
+          const session = client.startSession({ causalConsistency: true });
+
+          const error = await client
+            .db('test')
+            .collection('foo')
+            .insertOne({ foo: 'bar' }, { writeConcern: { w: 0 }, session })
+            .catch(error => error);
+
+          expect(error.message).to.equal('Cannot have explicit session with unacknowledged writes');
+
+          await session.endSession();
+        }
       });
     });
   });

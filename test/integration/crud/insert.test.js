@@ -1,5 +1,5 @@
 'use strict';
-const { assert: test, withClient, ignoreNsNotFound, setupDatabase } = require('../shared');
+const { assert: test, ignoreNsNotFound, setupDatabase } = require('../shared');
 const { format: f } = require('util');
 const { expect } = require('chai');
 
@@ -1953,58 +1953,47 @@ describe('crud - insert', function () {
         requires: { topology: ['single', 'replicaset', 'sharded', 'ssl', 'heap', 'wiredtiger'] }
       },
 
-      test: withClient((client, done) => {
+      test: async function () {
+        const client = this.configuration.newClient();
         const db = client.db('shouldCorrectlyInheritPromoteLongFalseNativeBSONWithGetMore', {
           promoteLongs: true
         });
         const collection = db.collection('test', { promoteLongs: false });
-        collection.insertMany(
-          [
-            { a: Long.fromNumber(10) },
-            { a: Long.fromNumber(10) },
-            { a: Long.fromNumber(10) },
-            { a: Long.fromNumber(10) },
-            { a: Long.fromNumber(10) },
-            { a: Long.fromNumber(10) },
-            { a: Long.fromNumber(10) },
-            { a: Long.fromNumber(10) },
-            { a: Long.fromNumber(10) },
-            { a: Long.fromNumber(10) },
-            { a: Long.fromNumber(10) },
-            { a: Long.fromNumber(10) },
-            { a: Long.fromNumber(10) },
-            { a: Long.fromNumber(10) },
-            { a: Long.fromNumber(10) },
-            { a: Long.fromNumber(10) },
-            { a: Long.fromNumber(10) },
-            { a: Long.fromNumber(10) },
-            { a: Long.fromNumber(10) },
-            { a: Long.fromNumber(10) },
-            { a: Long.fromNumber(10) },
-            { a: Long.fromNumber(10) },
-            { a: Long.fromNumber(10) },
-            { a: Long.fromNumber(10) }
-          ],
-          (err, doc) => {
-            expect(err).to.not.exist;
-            test.ok(doc);
+        const doc = await collection.insertMany([
+          { a: Long.fromNumber(10) },
+          { a: Long.fromNumber(10) },
+          { a: Long.fromNumber(10) },
+          { a: Long.fromNumber(10) },
+          { a: Long.fromNumber(10) },
+          { a: Long.fromNumber(10) },
+          { a: Long.fromNumber(10) },
+          { a: Long.fromNumber(10) },
+          { a: Long.fromNumber(10) },
+          { a: Long.fromNumber(10) },
+          { a: Long.fromNumber(10) },
+          { a: Long.fromNumber(10) },
+          { a: Long.fromNumber(10) },
+          { a: Long.fromNumber(10) },
+          { a: Long.fromNumber(10) },
+          { a: Long.fromNumber(10) },
+          { a: Long.fromNumber(10) },
+          { a: Long.fromNumber(10) },
+          { a: Long.fromNumber(10) },
+          { a: Long.fromNumber(10) },
+          { a: Long.fromNumber(10) },
+          { a: Long.fromNumber(10) },
+          { a: Long.fromNumber(10) },
+          { a: Long.fromNumber(10) }
+        ]);
+        test.ok(doc);
 
-            collection
-              .find({})
-              .batchSize(2)
-              .toArray((err, docs) => {
-                expect(err).to.not.exist;
-
-                docs.forEach((d, i) => {
-                  expect(d.a, `Failed on the document at index ${i}`).to.not.be.a('number');
-                  expect(d.a, `Failed on the document at index ${i}`).to.have.property('_bsontype');
-                  expect(d.a._bsontype, `Failed on the document at index ${i}`).to.be.equal('Long');
-                });
-                done();
-              });
-          }
-        );
-      })
+        const docs = await collection.find({}).batchSize(2).toArray();
+        docs.forEach((d, i) => {
+          expect(d.a, `Failed on the document at index ${i}`).to.not.be.a('number');
+          expect(d.a, `Failed on the document at index ${i}`).to.have.property('_bsontype');
+          expect(d.a._bsontype, `Failed on the document at index ${i}`).to.be.equal('Long');
+        });
+      }
     });
 
     it('shouldCorrectlyHonorPromoteLongTrueNativeBSON', {
