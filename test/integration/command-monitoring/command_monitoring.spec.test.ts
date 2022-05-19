@@ -19,7 +19,7 @@ describe('Command Monitoring spec tests', function () {
     //       It may be worth seeing if we can improve on this, as we might need the
     //       behavior in other future YAML tests.
     const maybeLong = val => (typeof val.equals === 'function' ? val.toNumber() : val);
-    function apmExpect(actual, expected, parentKey) {
+    function apmExpect(actual: any, expected: any, parentKey?: any) {
       Object.keys(expected).forEach(key => {
         expect(actual).to.include.keys([key]);
 
@@ -212,7 +212,9 @@ describe('Command Monitoring spec tests', function () {
             // Execute find
             return cursor
               .toArray()
-              .catch(() => {} /* ignore */)
+              .catch(() => {
+                /* ignore */
+              })
               .then(() =>
                 test.expectations.forEach(expectation =>
                   validateExpectations(expectation, monitoringResults)
@@ -243,9 +245,10 @@ describe('Command Monitoring spec tests', function () {
     loadSpecTests('command-monitoring/legacy').forEach(scenario => {
       describe(scenario.name, function () {
         scenario.tests.forEach(test => {
-          const requirements: MongoDBMetadataUI['requires'] = {
-            topology: ['single', 'replicaset', 'sharded']
-          };
+          const requirements = {
+            topology: ['single', 'replicaset', 'sharded'],
+            mongodb: undefined
+          } as any;
           if (test.ignore_if_server_version_greater_than) {
             requirements.mongodb = `<${test.ignore_if_server_version_greater_than}`;
           } else if (test.ignore_if_server_version_less_than) {
@@ -258,8 +261,9 @@ describe('Command Monitoring spec tests', function () {
             );
           }
 
+          const metadata: MongoDBMetadataUI = { requires: requirements };
           it(test.description, {
-            metadata: { requires: requirements },
+            metadata,
             test: async function () {
               if (
                 test.description ===

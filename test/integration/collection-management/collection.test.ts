@@ -650,7 +650,7 @@ describe('Collection', function () {
     }
 
     it('countDocuments should return appropriate error if aggregation fails with callback given', function (done) {
-      const replyHandler = () => {};
+      const replyHandler = () => null;
       const executeCountDocuments = (collection, close) => {
         collection.countDocuments(err => {
           expect(err).to.exist;
@@ -671,7 +671,7 @@ describe('Collection', function () {
     });
 
     it('countDocuments should error if aggregation fails using Promises', function (done) {
-      const replyHandler = () => {};
+      const replyHandler = () => null;
       const executeCountDocuments = (collection, close) => {
         collection
           .countDocuments()
@@ -804,7 +804,7 @@ describe('Collection', function () {
       const client = configuration.newClient({ w: 1 });
 
       let finish = err => {
-        finish = () => {};
+        finish = () => null;
         client.close(_err => done(err || _err));
       };
 
@@ -840,7 +840,7 @@ describe('Collection', function () {
         collection.updateOne(
           {},
           [{ $set: { a: 1 } }, { $set: { b: 1 } }, { $set: { d: 1 } }],
-          configuration.writeConcernMax(),
+          { writeConcern: { w: 'majority' } },
           (err, r) => {
             expect(err).to.not.exist;
             expect(r).property('matchedCount').to.equal(0);

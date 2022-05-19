@@ -536,8 +536,6 @@ describe('Bulk', function () {
     },
 
     test: function (done) {
-      const self = this;
-
       client.connect(function (err, client) {
         const db = client.db();
         const col = db.collection('batch_write_ordered_ops_8');
@@ -552,103 +550,89 @@ describe('Bulk', function () {
     }
   });
 
-  it('should correctly execute ordered batch using w:0', {
-    metadata: {
-      requires: { topology: ['single', 'replicaset', 'sharded', 'ssl', 'heap', 'wiredtiger'] }
-    },
+  it('should correctly execute ordered batch using w:0', function (done) {
+    client.connect(function (err, client) {
+      const db = client.db();
+      const col = db.collection('batch_write_ordered_ops_9');
 
-    test: function (done) {
-      const self = this;
+      const bulk = col.initializeOrderedBulkOp();
+      for (let i = 0; i < 100; i++) {
+        bulk.insert({ a: 1 });
+      }
 
-      client.connect(function (err, client) {
-        const db = client.db();
-        const col = db.collection('batch_write_ordered_ops_9');
+      bulk.find({ b: 1 }).upsert().update({ b: 1 });
+      bulk.find({ c: 1 }).delete();
 
-        const bulk = col.initializeOrderedBulkOp();
-        for (let i = 0; i < 100; i++) {
-          bulk.insert({ a: 1 });
-        }
+      bulk.execute({ writeConcern: { w: 0 } }, function (err, result) {
+        expect(err).to.not.exist;
+        test.equal(0, result.nUpserted);
+        test.equal(0, result.nInserted);
+        test.equal(0, result.nMatched);
+        test.ok(0 === result.nModified || result.nModified == null);
+        test.equal(0, result.nRemoved);
+        test.equal(false, result.hasWriteErrors());
 
-        bulk.find({ b: 1 }).upsert().update({ b: 1 });
-        bulk.find({ c: 1 }).delete();
+        client.close(done);
+      });
+    });
+  });
 
-        bulk.execute({ writeConcern: { w: 0 } }, function (err, result) {
-          expect(err).to.not.exist;
+  it('should correctly handle single unordered batch API', function (done) {
+    client.connect(function (err, client) {
+      const db = client.db();
+      const col = db.collection('batch_write_unordered_ops_legacy_1');
+
+      // Add unique index on b field causing all updates to fail
+      col.createIndex({ a: 1 }, { unique: true, sparse: false }, function (err) {
+        expect(err).to.not.exist;
+
+        // Initialize the unordered Batch
+        const batch = col.initializeUnorderedBulkOp();
+
+        // Add some operations to be executed in order
+        batch.insert({ b: 1, a: 1 });
+        batch
+          .find({ b: 2 })
+          .upsert()
+          .updateOne({ $set: { a: 1 } });
+        batch.insert({ b: 3, a: 2 });
+
+        // Execute the operations
+        batch.execute(function (err, result) {
+          expect(err).to.exist;
+          expect(result).to.not.exist;
+
+          // Basic properties check
+          result = err.result;
+          test.equal(err instanceof Error, true);
+          test.equal(2, result.nInserted);
           test.equal(0, result.nUpserted);
-          test.equal(0, result.nInserted);
           test.equal(0, result.nMatched);
           test.ok(0 === result.nModified || result.nModified == null);
-          test.equal(0, result.nRemoved);
-          test.equal(false, result.hasWriteErrors());
+          test.equal(true, result.hasWriteErrors());
+          test.equal(1, result.getWriteErrorCount());
 
+          // Get the first error
+          let error = result.getWriteErrorAt(0);
+          test.equal(11000, error.code);
+          test.ok(error.errmsg != null);
+
+          // Get the operation that caused the error
+          const op = error.getOperation();
+          test.equal(2, op.q.b);
+          test.equal(1, op.u['$set'].a);
+          expect(op.multi).to.not.be.true;
+          test.equal(true, op.upsert);
+
+          // Get the first error
+          error = result.getWriteErrorAt(1);
+          expect(error).to.not.exist;
+
+          // Finish up test
           client.close(done);
         });
       });
-    }
-  });
-
-  it('should correctly handle single unordered batch API', {
-    metadata: { requires: { topology: ['single', 'replicaset', 'ssl', 'heap', 'wiredtiger'] } },
-
-    test: function (done) {
-      const self = this;
-
-      client.connect(function (err, client) {
-        const db = client.db();
-        const col = db.collection('batch_write_unordered_ops_legacy_1');
-
-        // Add unique index on b field causing all updates to fail
-        col.createIndex({ a: 1 }, { unique: true, sparse: false }, function (err) {
-          expect(err).to.not.exist;
-
-          // Initialize the unordered Batch
-          const batch = col.initializeUnorderedBulkOp();
-
-          // Add some operations to be executed in order
-          batch.insert({ b: 1, a: 1 });
-          batch
-            .find({ b: 2 })
-            .upsert()
-            .updateOne({ $set: { a: 1 } });
-          batch.insert({ b: 3, a: 2 });
-
-          // Execute the operations
-          batch.execute(function (err, result) {
-            expect(err).to.exist;
-            expect(result).to.not.exist;
-
-            // Basic properties check
-            result = err.result;
-            test.equal(err instanceof Error, true);
-            test.equal(2, result.nInserted);
-            test.equal(0, result.nUpserted);
-            test.equal(0, result.nMatched);
-            test.ok(0 === result.nModified || result.nModified == null);
-            test.equal(true, result.hasWriteErrors());
-            test.equal(1, result.getWriteErrorCount());
-
-            // Get the first error
-            let error = result.getWriteErrorAt(0);
-            test.equal(11000, error.code);
-            test.ok(error.errmsg != null);
-
-            // Get the operation that caused the error
-            const op = error.getOperation();
-            test.equal(2, op.q.b);
-            test.equal(1, op.u['$set'].a);
-            expect(op.multi).to.not.be.true;
-            test.equal(true, op.upsert);
-
-            // Get the first error
-            error = result.getWriteErrorAt(1);
-            expect(error).to.not.exist;
-
-            // Finish up test
-            client.close(done);
-          });
-        });
-      });
-    }
+    });
   });
 
   it('should correctly handle multiple unordered batch API', function (done) {
@@ -696,8 +680,6 @@ describe('Bulk', function () {
     metadata: { requires: { topology: ['single', 'replicaset', 'ssl', 'heap', 'wiredtiger'] } },
 
     test: function (done) {
-      const self = this;
-
       client.connect(function (err, client) {
         const db = client.db();
         const coll = db.collection('batch_write_unordered_ops_legacy_3');
@@ -727,8 +709,6 @@ describe('Bulk', function () {
     metadata: { requires: { topology: ['single', 'replicaset', 'ssl', 'heap', 'wiredtiger'] } },
 
     test: function (done) {
-      const self = this;
-
       client.connect(function (err, client) {
         const db = client.db();
         const coll = db.collection('batch_write_unordered_ops_legacy_4');
@@ -762,57 +742,51 @@ describe('Bulk', function () {
     }
   });
 
-  it('should Correctly Execute Unordered Batch with duplicate key errors on updates', {
-    metadata: { requires: { topology: ['single', 'replicaset', 'ssl', 'heap', 'wiredtiger'] } },
+  it('should Correctly Execute Unordered Batch with duplicate key errors on updates', function (done) {
+    client.connect(function (err, client) {
+      const db = client.db();
+      const col = db.collection('batch_write_unordered_ops_legacy_6');
 
-    test: function (done) {
-      const self = this;
+      // Write concern
+      const writeConcern = self.configuration.writeConcernMax();
+      writeConcern.unique = true;
+      writeConcern.sparse = false;
 
-      client.connect(function (err, client) {
-        const db = client.db();
-        const col = db.collection('batch_write_unordered_ops_legacy_6');
+      // Add unique index on b field causing all updates to fail
+      col.createIndex({ b: 1 }, writeConcern, function (err) {
+        expect(err).to.not.exist;
 
-        // Write concern
-        const writeConcern = self.configuration.writeConcernMax();
-        writeConcern.unique = true;
-        writeConcern.sparse = false;
+        // Initialize the unordered Batch
+        const batch = col.initializeUnorderedBulkOp();
 
-        // Add unique index on b field causing all updates to fail
-        col.createIndex({ b: 1 }, writeConcern, function (err) {
-          expect(err).to.not.exist;
+        // Add some operations to be executed in order
+        batch.insert({ a: 1 });
+        batch.find({ a: 1 }).update({ $set: { b: 1 } });
+        batch.insert({ b: 1 });
+        batch.insert({ b: 1 });
+        batch.insert({ b: 1 });
+        batch.insert({ b: 1 });
 
-          // Initialize the unordered Batch
-          const batch = col.initializeUnorderedBulkOp();
+        // Execute the operations
+        batch.execute(self.configuration.writeConcernMax(), function (err, result) {
+          expect(err).to.exist;
+          expect(result).to.not.exist;
 
-          // Add some operations to be executed in order
-          batch.insert({ a: 1 });
-          batch.find({ a: 1 }).update({ $set: { b: 1 } });
-          batch.insert({ b: 1 });
-          batch.insert({ b: 1 });
-          batch.insert({ b: 1 });
-          batch.insert({ b: 1 });
+          // Test basic settings
+          result = err.result;
+          test.equal(2, result.nInserted);
+          test.equal(true, result.hasWriteErrors());
+          test.ok(result.getWriteErrorCount() === 4 || result.getWriteErrorCount() === 3);
 
-          // Execute the operations
-          batch.execute(self.configuration.writeConcernMax(), function (err, result) {
-            expect(err).to.exist;
-            expect(result).to.not.exist;
+          // Individual error checking
+          const error = result.getWriteErrorAt(0);
+          test.ok(error.code === 11000 || error.code === 11001);
+          test.ok(error.errmsg != null);
 
-            // Test basic settings
-            result = err.result;
-            test.equal(2, result.nInserted);
-            test.equal(true, result.hasWriteErrors());
-            test.ok(result.getWriteErrorCount() === 4 || result.getWriteErrorCount() === 3);
-
-            // Individual error checking
-            const error = result.getWriteErrorAt(0);
-            test.ok(error.code === 11000 || error.code === 11001);
-            test.ok(error.errmsg != null);
-
-            client.close(done);
-          });
+          client.close(done);
         });
       });
-    }
+    });
   });
 
   it('should provide descriptive error message for unordered batch with duplicate key errors on inserts', function (done) {
@@ -871,8 +845,6 @@ describe('Bulk', function () {
       metadata: { requires: { topology: ['single', 'replicaset', 'ssl', 'heap', 'wiredtiger'] } },
 
       test: function (done) {
-        const self = this;
-
         client.connect(function (err, client) {
           const db = client.db();
           const col = db.collection('batch_write_unordered_ops_legacy_7');
@@ -938,8 +910,6 @@ describe('Bulk', function () {
     metadata: { requires: { topology: ['single', 'replicaset', 'ssl', 'heap', 'wiredtiger'] } },
 
     test: function (done) {
-      const self = this;
-
       client.connect(function (err, client) {
         const db = client.db();
         const col = db.collection('batch_write_unordered_ops_legacy_8');
@@ -976,8 +946,6 @@ describe('Bulk', function () {
     metadata: { requires: { topology: ['single', 'replicaset', 'ssl', 'heap', 'wiredtiger'] } },
 
     test: function (done) {
-      const self = this;
-
       client.connect(function (err, client) {
         expect(err).to.not.exist;
 
@@ -1010,8 +978,6 @@ describe('Bulk', function () {
     metadata: { requires: { topology: ['single', 'replicaset', 'ssl', 'heap', 'wiredtiger'] } },
 
     test: function (done) {
-      const self = this;
-
       client.connect(function (err, client) {
         const db = client.db();
         const col = db.collection('batch_write_ordered_ops_8');
@@ -1032,8 +998,6 @@ describe('Bulk', function () {
     metadata: { requires: { topology: ['single', 'replicaset', 'ssl', 'heap', 'wiredtiger'] } },
 
     test: function (done) {
-      const self = this;
-
       client.connect(function (err, client) {
         const db = client.db();
         const col = db.collection('batch_write_ordered_ops_9');
@@ -1061,8 +1025,6 @@ describe('Bulk', function () {
   });
 
   it('should provide an accessor for operations on ordered bulk ops', function (done) {
-    const self = this;
-
     client.connect(function (err, client) {
       const db = client.db();
       const col = db.collection('bulk_get_operations_test');
@@ -1091,8 +1053,6 @@ describe('Bulk', function () {
     metadata: { requires: { topology: 'single', mongodb: '>2.5.4' } },
 
     test: function (done) {
-      const self = this;
-
       client.connect(function (err, client) {
         const db = client.db();
         const col = db.collection('batch_write_concerns_ops_1');
@@ -1122,8 +1082,6 @@ describe('Bulk', function () {
     },
 
     test: function (done) {
-      const self = this;
-
       client.connect(function (err, client) {
         const db = client.db();
         const docs = [];
@@ -1148,8 +1106,6 @@ describe('Bulk', function () {
   });
 
   it('should provide an accessor for operations on unordered bulk ops', function (done) {
-    const self = this;
-
     client.connect(function (err, client) {
       const db = client.db();
       const col = db.collection('bulk_get_operations_test');
@@ -1178,8 +1134,6 @@ describe('Bulk', function () {
     metadata: { requires: { topology: 'single', mongodb: '>2.5.4' } },
 
     test: function (done) {
-      const self = this;
-
       client.connect(function (err, client) {
         const db = client.db();
         const col = db.collection('batch_write_concerns_ops_1');
@@ -1202,8 +1156,6 @@ describe('Bulk', function () {
     metadata: { requires: { topology: 'single', mongodb: '>2.5.4' } },
 
     test: function (done) {
-      const self = this;
-
       client.connect(function (err, client) {
         const db = client.db();
         const col = db.collection('batch_write_concerns_ops_1');
@@ -1232,17 +1184,16 @@ describe('Bulk', function () {
     metadata: { requires: { topology: 'single', mongodb: '>2.5.4' } },
 
     test: function (done) {
-      const self = this;
-
       client.connect(function (err, client) {
         const db = client.db();
         const insertFirst = false;
         const batchSize = 1000;
         const collection = db.collection('batch_write_unordered_split_test');
-        let operation = collection.initializeUnorderedBulkOp(),
-          documents = [];
+        let operation = collection.initializeUnorderedBulkOp();
+        const documents = [];
 
-        for (var i = 0; i < 10000; i++) {
+        let i = 0;
+        for (; i < 10000; i++) {
           const document = { name: 'bob' + i };
           documents.push(document);
           operation.insert(document);
@@ -1289,17 +1240,15 @@ describe('Bulk', function () {
     metadata: { requires: { topology: 'single', mongodb: '>2.5.4' } },
 
     test: function (done) {
-      const self = this;
-
       client.connect(function (err, client) {
         const db = client.db();
         const insertFirst = false;
         const batchSize = 1000;
         const collection = db.collection('batch_write_ordered_split_test');
-        let operation = collection.initializeOrderedBulkOp(),
-          documents = [];
+        let operation = collection.initializeOrderedBulkOp();
+        const documents = [];
 
-        for (var i = 0; i < 10000; i++) {
+        for (let i = 0; i < 10000; i++) {
           const document = { name: 'bob' + i };
           documents.push(document);
           operation.insert(document);
@@ -1328,7 +1277,7 @@ describe('Bulk', function () {
         });
 
         function insertDocuments() {
-          for (i = 10000; i < 10200; i++) {
+          for (let i = 10000; i < 10200; i++) {
             operation.insert({ name: 'bob' + i });
           }
         }
@@ -1353,8 +1302,6 @@ describe('Bulk', function () {
     },
 
     test: function (done) {
-      const self = this;
-
       client.connect(function (err, client) {
         const db = client.db();
         const docs = [];
@@ -1393,8 +1340,6 @@ describe('Bulk', function () {
     {
       metadata: { requires: { mongodb: '>=2.6.0', topology: 'single' } },
       test: function (done) {
-        const self = this;
-
         client.connect(function (err, client) {
           const db = client.db();
           db.collection('doesnt_matter').insertMany([], { ordered: false }, function (err) {
@@ -1408,8 +1353,6 @@ describe('Bulk', function () {
   );
 
   it('should return an error instead of throwing when an empty bulk operation is submitted (with promise)', function () {
-    const self = this;
-
     return client
       .connect()
       .then(function () {
@@ -1437,7 +1380,9 @@ describe('Bulk', function () {
       // NOTE: Hack to get around unrelated strange error in bulkWrites for right now.
       .then(() => {
         db = client.db();
-        return db.dropCollection('doesnt_matter').catch(() => {});
+        return db.dropCollection('doesnt_matter').catch(() => {
+          // ignore
+        });
       })
       .then(() => {
         return db.createCollection('doesnt_matter');
@@ -1463,7 +1408,9 @@ describe('Bulk', function () {
       // NOTE: Hack to get around unrelated strange error in bulkWrites for right now.
       .then(() => {
         db = client.db();
-        return db.dropCollection('doesnt_matter').catch(() => {});
+        return db.dropCollection('doesnt_matter').catch(() => {
+          // ignore
+        });
       })
       .then(() => {
         return db.createCollection('doesnt_matter');
@@ -1490,7 +1437,9 @@ describe('Bulk', function () {
       .connect()
       .then(() => {
         db = client.db();
-        return db.dropCollection('doesnt_matter').catch(() => {});
+        return db.dropCollection('doesnt_matter').catch(() => {
+          // ignore
+        });
       })
       .then(() => {
         return db.createCollection('doesnt_matter');
@@ -1513,7 +1462,9 @@ describe('Bulk', function () {
       .connect()
       .then(() => {
         db = client.db();
-        return db.dropCollection('doesnt_matter').catch(() => {});
+        return db.dropCollection('doesnt_matter').catch(() => {
+          // ignore
+        });
       })
       .then(() => {
         return db.createCollection('doesnt_matter');

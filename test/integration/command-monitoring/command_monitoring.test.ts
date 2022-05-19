@@ -43,7 +43,7 @@ describe('APM', function () {
     test: function () {
       const started = [];
       const succeeded = [];
-      const self = this;
+
       const client = this.configuration.newClient(
         { writeConcern: { w: 1 } },
         { maxPoolSize: 1, monitorCommands: true }
@@ -52,7 +52,7 @@ describe('APM', function () {
       client.on('commandStarted', filterForCommands('insert', started));
       client.on('commandSucceeded', filterForCommands('insert', succeeded));
 
-      const db = client.db(self.configuration.db);
+      const db = client.db(this.configuration.db);
       const collection = db.collection('apm_test_cursor');
       return collection.insertMany([{ a: 1 }, { a: 2 }, { a: 3 }]).then(r => {
         expect(r).property('insertedCount').to.equal(3);
@@ -69,10 +69,9 @@ describe('APM', function () {
     metadata: { requires: { topology: ['replicaset'], mongodb: '>=3.0.0' } },
 
     test: function () {
-      const self = this;
       const started = [];
       const succeeded = [];
-      const client = self.configuration.newClient(
+      const client = this.configuration.newClient(
         { writeConcern: { w: 1 } },
         { maxPoolSize: 1, monitorCommands: true }
       );
@@ -80,11 +79,11 @@ describe('APM', function () {
       client.on('commandStarted', filterForCommands('listCollections', started));
       client.on('commandSucceeded', filterForCommands('listCollections', succeeded));
 
-      const db = client.db(self.configuration.db);
+      const db = client.db(this.configuration.db);
 
       return db
         .collection('apm_test_list_collections')
-        .insertOne({ a: 1 }, self.configuration.writeConcernMax())
+        .insertOne({ a: 1 }, this.configuration.writeConcernMax())
         .then(r => {
           expect(r).property('insertedId').to.exist;
           return db.listCollections({}, { readPreference: ReadPreference.primary }).toArray();
@@ -104,10 +103,9 @@ describe('APM', function () {
     metadata: { requires: { topology: ['replicaset'], mongodb: '>=3.0.0' } },
 
     test: function () {
-      const self = this;
       const started = [];
       const succeeded = [];
-      const client = self.configuration.newClient(
+      const client = this.configuration.newClient(
         { writeConcern: { w: 1 } },
         { maxPoolSize: 1, monitorCommands: true }
       );
@@ -116,11 +114,11 @@ describe('APM', function () {
       client.on('commandStarted', filterForCommands(desiredEvents, started));
       client.on('commandSucceeded', filterForCommands(desiredEvents, succeeded));
 
-      const db = client.db(self.configuration.db);
+      const db = client.db(this.configuration.db);
 
       return db
         .collection('apm_test_list_collections')
-        .insertOne({ a: 1 }, self.configuration.writeConcernMax())
+        .insertOne({ a: 1 }, this.configuration.writeConcernMax())
         .then(r => {
           expect(r).property('insertedId').to.exist;
 
@@ -148,11 +146,10 @@ describe('APM', function () {
     metadata: { requires: { topology: ['single', 'replicaset'] } },
 
     test: function () {
-      const self = this;
       const started = [];
       const succeeded = [];
       const failed = [];
-      const client = self.configuration.newClient(
+      const client = this.configuration.newClient(
         { writeConcern: { w: 1 } },
         { maxPoolSize: 1, monitorCommands: true }
       );
@@ -162,7 +159,7 @@ describe('APM', function () {
       client.on('commandSucceeded', filterForCommands(desiredEvents, succeeded));
       client.on('commandFailed', filterForCommands(desiredEvents, failed));
 
-      const db = client.db(self.configuration.db);
+      const db = client.db(this.configuration.db);
 
       // Drop the collection
       return db
@@ -220,11 +217,10 @@ describe('APM', function () {
     metadata: { requires: { topology: ['single', 'replicaset'], mongodb: '>=2.6.0' } },
 
     test: function () {
-      const self = this;
       const started = [];
       const succeeded = [];
       const failed = [];
-      const client = self.configuration.newClient(
+      const client = this.configuration.newClient(
         { writeConcern: { w: 1 } },
         { maxPoolSize: 1, monitorCommands: true }
       );
@@ -234,7 +230,7 @@ describe('APM', function () {
       client.on('commandSucceeded', filterForCommands(desiredEvents, succeeded));
       client.on('commandFailed', filterForCommands(desiredEvents, failed));
 
-      const db = client.db(self.configuration.db);
+      const db = client.db(this.configuration.db);
 
       // Drop the collection
       return db
@@ -277,10 +273,9 @@ describe('APM', function () {
     metadata: { requires: { topology: ['single', 'replicaset'] } },
 
     test: function () {
-      const self = this;
       const started = [];
       const succeeded = [];
-      const client = self.configuration.newClient(
+      const client = this.configuration.newClient(
         { writeConcern: { w: 1 } },
         { maxPoolSize: 1, monitorCommands: true }
       );
@@ -289,7 +284,7 @@ describe('APM', function () {
       client.on('commandStarted', filterForCommands(desiredEvents, started));
       client.on('commandSucceeded', filterForCommands(desiredEvents, succeeded));
 
-      const db = client.db(self.configuration.db);
+      const db = client.db(this.configuration.db);
       return db
         .collection('apm_test_3')
         .bulkWrite(
@@ -316,11 +311,10 @@ describe('APM', function () {
     metadata: { requires: { topology: ['single', 'replicaset'] } },
 
     test: function () {
-      const self = this;
       const started = [];
       const succeeded = [];
       const failed = [];
-      const client = self.configuration.newClient(
+      const client = this.configuration.newClient(
         { writeConcern: { w: 1 } },
         { maxPoolSize: 1, monitorCommands: true }
       );
@@ -330,7 +324,7 @@ describe('APM', function () {
       client.on('commandSucceeded', filterForCommands(desiredEvents, succeeded));
       client.on('commandFailed', filterForCommands(desiredEvents, failed));
 
-      const db = client.db(self.configuration.db);
+      const db = client.db(this.configuration.db);
 
       return db
         .collection('apm_test_2')
@@ -364,11 +358,10 @@ describe('APM', function () {
     metadata: { requires: { topology: ['single', 'replicaset'] } },
 
     test: function () {
-      const self = this;
       const started = [];
       const succeeded = [];
       const failed = [];
-      const client = self.configuration.newClient(
+      const client = this.configuration.newClient(
         { writeConcern: { w: 1 } },
         { maxPoolSize: 1, monitorCommands: true }
       );
@@ -379,7 +372,7 @@ describe('APM', function () {
       client.on('commandFailed', filterForCommands(desiredEvents, failed));
 
       return client
-        .db(self.configuration.db)
+        .db(this.configuration.db)
         .command({ getnonce: true })
         .then(r => {
           expect(r).to.exist;
@@ -397,10 +390,9 @@ describe('APM', function () {
     metadata: { requires: { topology: ['single', 'replicaset'] } },
 
     test: function () {
-      const self = this;
       const started = [];
       const succeeded = [];
-      const client = self.configuration.newClient(
+      const client = this.configuration.newClient(
         { writeConcern: { w: 1 } },
         { maxPoolSize: 1, monitorCommands: true }
       );
@@ -410,7 +402,7 @@ describe('APM', function () {
       client.on('commandSucceeded', filterForCommands(desiredEvents, succeeded));
 
       return client
-        .db(self.configuration.db)
+        .db(this.configuration.db)
         .collection('apm_test_u_1')
         .updateOne({ a: 1 }, { $set: { b: 1 } }, { upsert: true })
         .then(r => {
@@ -428,10 +420,9 @@ describe('APM', function () {
     metadata: { requires: { topology: ['single', 'replicaset'] } },
 
     test: function () {
-      const self = this;
       const started = [];
       const succeeded = [];
-      const client = self.configuration.newClient(
+      const client = this.configuration.newClient(
         { writeConcern: { w: 1 } },
         { maxPoolSize: 1, monitorCommands: true }
       );
@@ -441,7 +432,7 @@ describe('APM', function () {
       client.on('commandSucceeded', filterForCommands(desiredEvents, succeeded));
 
       return client
-        .db(self.configuration.db)
+        .db(this.configuration.db)
         .collection('apm_test_u_2')
         .updateMany({ a: 1 }, { $set: { b: 1 } }, { upsert: true })
         .then(r => {
@@ -459,10 +450,9 @@ describe('APM', function () {
     metadata: { requires: { topology: ['single', 'replicaset'] } },
 
     test: function () {
-      const self = this;
       const started = [];
       const succeeded = [];
-      const client = self.configuration.newClient(
+      const client = this.configuration.newClient(
         { writeConcern: { w: 1 } },
         { maxPoolSize: 1, monitorCommands: true }
       );
@@ -472,7 +462,7 @@ describe('APM', function () {
       client.on('commandSucceeded', filterForCommands(desiredEvents, succeeded));
 
       return client
-        .db(self.configuration.db)
+        .db(this.configuration.db)
         .collection('apm_test_u_3')
         .deleteOne({ a: 1 })
         .then(r => {
@@ -490,13 +480,12 @@ describe('APM', function () {
     metadata: { requires: { topology: ['single', 'replicaset'], mongodb: '<=3.0.x' } },
 
     test: function () {
-      const self = this;
-      const client = self.configuration.newClient(
+      const client = this.configuration.newClient(
         { writeConcern: { w: 1 } },
         { maxPoolSize: 1, monitorCommands: true }
       );
 
-      const db = client.db(self.configuration.db);
+      const db = client.db(this.configuration.db);
       const admindb = db.admin();
       let cursorCountBefore;
       let cursorCountAfter;
@@ -531,7 +520,6 @@ describe('APM', function () {
     metadata: { requires: { topology: ['single', 'replicaset'], mongodb: '>=3.0.0' } },
 
     test: function () {
-      const self = this;
       const started = [];
       const succeeded = [];
 
@@ -539,7 +527,7 @@ describe('APM', function () {
       const docs = [];
       for (let i = 0; i < 2500; i++) docs.push({ a: i });
 
-      const client = self.configuration.newClient(
+      const client = this.configuration.newClient(
         { writeConcern: { w: 1 } },
         { maxPoolSize: 1, monitorCommands: true }
       );
@@ -548,7 +536,7 @@ describe('APM', function () {
       client.on('commandStarted', filterForCommands(desiredEvents, started));
       client.on('commandSucceeded', filterForCommands(desiredEvents, succeeded));
 
-      const db = client.db(self.configuration.db);
+      const db = client.db(this.configuration.db);
       return db
         .collection('apm_test_u_4')
         .drop()
@@ -580,10 +568,9 @@ describe('APM', function () {
   it('should correctly decorate the apm result for listCollections with cursorId', {
     metadata: { requires: { topology: ['single', 'replicaset'], mongodb: '>=3.0.0' } },
     test: function () {
-      const self = this;
       const started = [];
       const succeeded = [];
-      const client = self.configuration.newClient(
+      const client = this.configuration.newClient(
         { writeConcern: { w: 1 } },
         { maxPoolSize: 1, monitorCommands: true }
       );
@@ -592,7 +579,7 @@ describe('APM', function () {
       client.on('commandStarted', filterForCommands(desiredEvents, started));
       client.on('commandSucceeded', filterForCommands(desiredEvents, succeeded));
 
-      const db = client.db(self.configuration.db);
+      const db = client.db(this.configuration.db);
 
       const promises = [];
       for (let i = 0; i < 20; i++) {

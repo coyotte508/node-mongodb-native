@@ -743,14 +743,15 @@ describe('Aggregation', function () {
 
       // Override the db.command to validate the correct command
       // is executed
-      const cmd = db.command;
+      const command = db.command.bind(db);
       // Validate the command
-      db.command = function (c) {
+      db.command = function (...args: Parameters<typeof db['command']>) {
+        const c = args[0];
         expect(err).to.not.exist;
         expect(c.maxTimeMS).to.equal(1000);
 
         // Apply to existing command
-        cmd.apply(db, Array.prototype.slice.call(arguments, 0));
+        command(...args);
       };
 
       // Iterate over all the items in the cursor
@@ -760,12 +761,13 @@ describe('Aggregation', function () {
         expect(result.authors).to.eql(['bob']);
 
         // Validate the command
-        db.command = function (c) {
+        db.command = function (...args: Parameters<typeof db['command']>) {
+          const c = args[0];
           expect(err).to.not.exist;
           expect(c.maxTimeMS).to.equal(1000);
 
           // Apply to existing command
-          cmd.apply(db, Array.prototype.slice.call(arguments, 0));
+          command(...args);
         };
 
         // Execute aggregate, notice the pipeline is expressed as an Array
@@ -793,7 +795,7 @@ describe('Aggregation', function () {
         expect(secondCursor).to.exist;
 
         // Return the command
-        db.command = cmd;
+        db.command = command;
         done();
       });
     });
@@ -808,12 +810,13 @@ describe('Aggregation', function () {
     const db = client.db(databaseName);
     const collection = db.collection('testingPassingDownTheAggregationCommand');
 
-    const command = db.command;
+    const command = db.command.bind(db);
 
-    db.command = function (c) {
+    db.command = function (...args: Parameters<typeof db['command']>) {
+      const c = args[0];
       expect(c).to.be.an('object');
       expect(c.comment).to.be.a('string').and.to.equal('comment');
-      command.apply(db, Array.prototype.slice.call(arguments, 0));
+      command(...args);
     };
 
     const cursor = collection.aggregate([{ $project: { _id: 1 } }], { comment });

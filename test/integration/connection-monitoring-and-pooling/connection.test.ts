@@ -275,11 +275,6 @@ describe('Connection', function () {
       client.connect();
     });
 
-    /**
-     * @param {any} configuration
-     * @param {any} testName
-     * @param {any} callback
-     */
     function connectionTester(configuration, testName, callback) {
       return function (err, client) {
         expect(err).to.not.exist;

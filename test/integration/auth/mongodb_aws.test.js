@@ -4,7 +4,7 @@ const { removeAuthFromConnectionString } = require('../../tools/utils');
 const sinon = require('sinon');
 const http = require('http');
 const { performance } = require('perf_hooks');
-const { MongoAWSError, MongoError } = require('../../../src');
+const { MongoAWSError } = require('../../../src');
 
 describe('MONGODB-AWS', function () {
   beforeEach(function () {
