@@ -1,11 +1,10 @@
-'use strict';
+import { expect } from 'chai';
+import * as path from 'path';
 
-const path = require('path');
-const { setupDatabase, filterOutCommands } = require('../shared');
-const { loadSpecTests } = require('../../spec');
-const { LEGACY_HELLO_COMMAND } = require('../../../src/constants');
-const { expect } = require('chai');
-const { runUnifiedSuite } = require('../../tools/unified-spec-runner/runner');
+import { LEGACY_HELLO_COMMAND } from '../../../src/constants';
+import { loadSpecTests } from '../../spec';
+import { runUnifiedSuite } from '../../tools/unified-spec-runner/runner';
+import { filterOutCommands, setupDatabase } from '../shared';
 
 describe('Command Monitoring spec tests', function () {
   describe('command monitoring legacy spec tests', function () {
@@ -22,7 +21,7 @@ describe('Command Monitoring spec tests', function () {
     const maybeLong = val => (typeof val.equals === 'function' ? val.toNumber() : val);
     function apmExpect(actual, expected, parentKey) {
       Object.keys(expected).forEach(key => {
-        expect(actual).to.include.key(key);
+        expect(actual).to.include.keys([key]);
 
         // TODO: This is a workaround that works because all sorts in the specs
         // are objects with one key; ideally we'd want to adjust the spec definitions
@@ -205,7 +204,7 @@ describe('Command Monitoring spec tests', function () {
 
             // Set any modifiers
             if (args.modifiers) {
-              for (let modifier in args.modifiers) {
+              for (const modifier in args.modifiers) {
                 cursor.addQueryModifier(modifier, args.modifiers[modifier]);
               }
             }
@@ -228,9 +227,11 @@ describe('Command Monitoring spec tests', function () {
             ? db.collection(scenario.collection_name, operation.collectionOptions)
             : db.collection(scenario.collection_name);
 
-          const promise = coll[commandName].apply(coll, params);
+          const promise = coll[commandName](...params);
           return promise
-            .catch(() => {} /* ignore */)
+            .catch(() => {
+              /* ignore */
+            })
             .then(() =>
               test.expectations.forEach(expectation =>
                 validateExpectations(expectation, monitoringResults)
@@ -242,7 +243,9 @@ describe('Command Monitoring spec tests', function () {
     loadSpecTests('command-monitoring/legacy').forEach(scenario => {
       describe(scenario.name, function () {
         scenario.tests.forEach(test => {
-          const requirements = { topology: ['single', 'replicaset', 'sharded'] };
+          const requirements: MongoDBMetadataUI['requires'] = {
+            topology: ['single', 'replicaset', 'sharded']
+          };
           if (test.ignore_if_server_version_greater_than) {
             requirements.mongodb = `<${test.ignore_if_server_version_greater_than}`;
           } else if (test.ignore_if_server_version_less_than) {
@@ -257,7 +260,7 @@ describe('Command Monitoring spec tests', function () {
 
           it(test.description, {
             metadata: { requires: requirements },
-            test: function () {
+            test: async function () {
               if (
                 test.description ===
                 'A successful find event with a getmore and the server kills the cursor'
@@ -267,10 +270,11 @@ describe('Command Monitoring spec tests', function () {
               }
 
               const client = this.configuration.newClient({}, { monitorCommands: true });
-              return client.connect().then(client => {
-                expect(client).to.exist;
-                return executeOperation(client, scenario, test).then(() => client.close());
-              });
+              try {
+                await executeOperation(client, scenario, test);
+              } finally {
+                await client.close();
+              }
             }
           });
         });

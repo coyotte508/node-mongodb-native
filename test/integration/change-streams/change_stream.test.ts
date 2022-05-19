@@ -22,7 +22,7 @@ import {
   TestBuilder,
   UnifiedTestSuiteBuilder
 } from '../../tools/utils';
-import { delay, setupDatabase, withClient, withCursor } from '../shared';
+import { delay, setupDatabase, withCursor } from '../shared';
 
 function withChangeStream(
   callback: (collection: Collection, changeStream: ChangeStream, done: Mocha.Done) => void
@@ -32,7 +32,59 @@ function withChangeStream(
 
   // TODO(NODE-2764): remove withClient and withChangeStream usage, use mocha hooks
   const withClientTyped: (cb: (client: MongoClient, done: Mocha.Done) => void) => Mocha.Func =
-    withClient as any;
+    function withClient(client, callback) {
+      let connectionString;
+      if (arguments.length === 1) {
+        callback = client;
+        client = undefined;
+      } else {
+        if (typeof client === 'string') {
+          connectionString = client;
+          client = undefined;
+        }
+      }
+
+      if (callback.length === 2) {
+        const cb = callback;
+        callback = client => new Promise(resolve => cb(client, resolve));
+      }
+
+      function cleanup(err?: Error) {
+        return new Promise<void>((resolve, reject) => {
+          try {
+            client.close(closeErr => {
+              const finalErr = err || closeErr;
+              if (finalErr) {
+                return reject(finalErr);
+              }
+              return resolve();
+            });
+          } catch (e) {
+            return reject(err || e);
+          }
+        });
+      }
+
+      function lambda() {
+        if (!client) {
+          client = this.configuration.newClient(connectionString);
+        }
+        return client
+          .connect()
+          .then(callback)
+          .then(err => {
+            cleanup();
+            if (err) {
+              throw err;
+            }
+          }, cleanup);
+      }
+
+      if (this && this.configuration) {
+        return lambda.call(this);
+      }
+      return lambda;
+    } as any;
 
   return withClientTyped((client, done) => {
     const db = client.db(dbName);
@@ -174,27 +226,28 @@ describe('Change Streams', function () {
     return await setupDatabase(this.configuration, ['integration_tests']);
   });
 
+  let client: MongoClient;
   beforeEach(async function () {
     const configuration = this.configuration;
-    const client = configuration.newClient();
+    client = configuration.newClient();
 
-    await client.connect();
     const db = client.db('integration_tests');
     try {
       await db.createCollection('test');
     } catch {
       // ns already exists, don't care
-    } finally {
-      await client.close();
     }
   });
-  afterEach(async () => await mock.cleanup());
+  afterEach(async () => {
+    await client.close();
+    await mock.cleanup();
+  });
 
   context('ChangeStreamCursor options', function () {
     let client, db, collection;
 
-    beforeEach(async function () {
-      client = await this.configuration.newClient().connect();
+    beforeEach(function () {
+      client = this.configuration.newClient();
       db = client.db('db');
       collection = db.collection('collection');
     });
@@ -281,29 +334,23 @@ describe('Change Streams', function () {
         done(err);
       }
 
-      const configuration = this.configuration;
-      const client = configuration.newClient();
+      this.defer(() => client.close());
 
-      client.connect((err, client) => {
-        expect(err).to.not.exist;
-        this.defer(() => client.close());
+      const coll = client.db('integration_tests').collection('listenertest');
+      const changeStream = coll.watch();
+      this.defer(() => changeStream.close());
 
-        const coll = client.db('integration_tests').collection('listenertest');
-        const changeStream = coll.watch();
-        this.defer(() => changeStream.close());
-
-        changeStream.on('change', () => {
-          expect(changeStream.cursorStream.listenerCount('data')).to.equal(1);
-          changeStream.close(err => {
-            expect(changeStream.cursorStream).to.not.exist;
-            expect(err).to.not.exist;
-            close(err);
-          });
+      changeStream.on('change', () => {
+        expect(changeStream.cursorStream.listenerCount('data')).to.equal(1);
+        changeStream.close(err => {
+          expect(changeStream.cursorStream).to.not.exist;
+          expect(err).to.not.exist;
+          close(err);
         });
-
-        waitForStarted(changeStream, () => this.defer(coll.insertOne({ x: 1 })));
-        changeStream.on('error', err => close(err));
       });
+
+      waitForStarted(changeStream, () => this.defer(coll.insertOne({ x: 1 })));
+      changeStream.on('error', err => close(err));
     }
   });
 

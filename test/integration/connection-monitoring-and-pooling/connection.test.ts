@@ -1,14 +1,13 @@
-'use strict';
+import { expect } from 'chai';
 
-const { ServerHeartbeatStartedEvent, MongoClient } = require('../../../src');
-const { Connection } = require('../../../src/cmap/connection');
-const { connect } = require('../../../src/cmap/connect');
-const { expect } = require('chai');
-const { setupDatabase, withClient, assert: test } = require('../shared');
-const { ns, HostAddress } = require('../../../src/utils');
-const { LEGACY_HELLO_COMMAND } = require('../../../src/constants');
-const { Topology } = require('../../../src/sdam/topology');
-const { skipBrokenAuthTestBeforeEachHook } = require('../../tools/runner/hooks/configuration');
+import { MongoClient, ServerHeartbeatStartedEvent } from '../../../src';
+import { connect } from '../../../src/cmap/connect';
+import { Connection } from '../../../src/cmap/connection';
+import { LEGACY_HELLO_COMMAND } from '../../../src/constants';
+import { Topology } from '../../../src/sdam/topology';
+import { HostAddress, ns } from '../../../src/utils';
+import { skipBrokenAuthTestBeforeEachHook } from '../../tools/runner/hooks/configuration';
+import { assert as test, setupDatabase } from '../shared';
 
 describe('Connection', function () {
   beforeEach(
@@ -184,8 +183,8 @@ describe('Connection', function () {
 
     it('should correctly start monitoring for single server connection', {
       metadata: { requires: { topology: 'single', os: '!win32' } },
-      test: function (done) {
-        var configuration = this.configuration;
+      test: async function () {
+        const configuration = this.configuration;
         client = configuration.newClient(
           `mongodb://${encodeURIComponent('/tmp/mongodb-27017.sock')}?w=1`,
           {
@@ -200,10 +199,8 @@ describe('Connection', function () {
           isMonitoring = event instanceof ServerHeartbeatStartedEvent;
         });
 
-        client.connect().then(() => {
-          expect(isMonitoring);
-          done();
-        });
+        await client.connect();
+        expect(isMonitoring).to.be.true;
       }
     });
 
@@ -213,33 +210,30 @@ describe('Connection', function () {
       },
 
       test: function (done) {
-        var configuration = this.configuration;
+        const configuration = this.configuration;
         client = configuration.newClient(
           `mongodb://${encodeURIComponent('/tmp/mongodb-27017.sock')}?w=1`,
           { maxPoolSize: 1 }
         );
 
-        client.connect(function (err, client) {
-          expect(err).to.not.exist;
-          var db = client.db(configuration.db);
+        const db = client.db(configuration.db);
 
-          db.collection('domainSocketCollection0').insert(
-            { a: 1 },
-            { writeConcern: { w: 1 } },
-            function (err) {
-              expect(err).to.not.exist;
+        db.collection('domainSocketCollection0').insert(
+          { a: 1 },
+          { writeConcern: { w: 1 } },
+          function (err) {
+            expect(err).to.not.exist;
 
-              db.collection('domainSocketCollection0')
-                .find({ a: 1 })
-                .toArray(function (err, items) {
-                  expect(err).to.not.exist;
-                  test.equal(1, items.length);
+            db.collection('domainSocketCollection0')
+              .find({ a: 1 })
+              .toArray(function (err, items) {
+                expect(err).to.not.exist;
+                test.equal(1, items.length);
 
-                  done();
-                });
-            }
-          );
-        });
+                done();
+              });
+          }
+        );
       }
     });
 
@@ -259,7 +253,7 @@ describe('Connection', function () {
     });
 
     it('should correctly connect to server using just events', function (done) {
-      var configuration = this.configuration;
+      const configuration = this.configuration;
       client = configuration.newClient({ w: 1 }, { maxPoolSize: 1 });
 
       client.on('open', clientFromEvent => {
@@ -271,20 +265,14 @@ describe('Connection', function () {
       client.connect();
     });
 
-    it('should correctly connect to server using big connection pool', {
-      metadata: {
-        requires: { topology: ['single', 'replicaset', 'sharded', 'ssl', 'heap', 'wiredtiger'] }
-      },
+    it('should correctly connect to server using big connection pool', function (done) {
+      const configuration = this.configuration;
+      client = configuration.newClient({ w: 1 }, { maxPoolSize: 2000 });
+      client.on('open', function () {
+        done();
+      });
 
-      test: function (done) {
-        var configuration = this.configuration;
-        client = configuration.newClient({ w: 1 }, { maxPoolSize: 2000 });
-        client.on('open', function () {
-          done();
-        });
-
-        client.connect();
-      }
+      client.connect();
     });
 
     /**
@@ -295,7 +283,7 @@ describe('Connection', function () {
     function connectionTester(configuration, testName, callback) {
       return function (err, client) {
         expect(err).to.not.exist;
-        var db = client.db(configuration.db);
+        const db = client.db(configuration.db);
 
         db.createCollection(testName, function (err, collection) {
           expect(err).to.not.exist;
@@ -339,14 +327,11 @@ describe('Connection', function () {
         client = configuration.newClient();
 
         // First add a user.
-        client.connect(function (err, client) {
-          expect(err).to.not.exist;
-          var db = client.db(configuration.db);
+        const db = client.db(configuration.db);
 
-          db.addUser(username, password, function (err) {
-            expect(err).to.not.exist;
-            restOfTest();
-          });
+        db.addUser(username, password, function (err) {
+          expect(err).to.not.exist;
+          restOfTest();
         });
 
         function restOfTest() {
@@ -370,18 +355,15 @@ describe('Connection', function () {
 
         // First add a user.
         client = configuration.newClient();
-        client.connect(function (err, client) {
-          expect(err).to.not.exist;
-          var db = client.db(configuration.db);
+        const db = client.db(configuration.db);
 
-          db.addUser(username, password, { roles: ['readWrite', 'dbAdmin'] }, function (err) {
-            expect(err).to.not.exist;
-            restOfTest();
-          });
+        db.addUser(username, password, { roles: ['readWrite', 'dbAdmin'] }, function (err) {
+          expect(err).to.not.exist;
+          restOfTest();
         });
 
         function restOfTest() {
-          var opts = { auth: { username, password }, authSource: configuration.db };
+          const opts = { auth: { username, password }, authSource: configuration.db };
 
           testClient = configuration.newClient(opts);
 
@@ -398,7 +380,7 @@ describe('Connection', function () {
       metadata: { requires: { topology: 'single' } },
 
       test: function (done) {
-        var configuration = this.configuration;
+        const configuration = this.configuration;
         client = configuration.newClient({
           auth: {
             username: 'slithy',
@@ -423,33 +405,5 @@ describe('Connection', function () {
         ).to.throw();
       }
     });
-
-    it(
-      'should be able to connect again after close',
-      withClient(function (client, done) {
-        const collection = client.db('shouldConnectAfterClose').collection('test');
-        collection.insertOne({ a: 1, b: 2 }, (err, result) => {
-          expect(err).to.not.exist;
-          expect(result).to.exist;
-
-          client.close(err => {
-            expect(err).to.not.exist;
-
-            client.connect(err => {
-              expect(err).to.not.exist;
-
-              collection.findOne({ a: 1 }, (err, result) => {
-                expect(err).to.not.exist;
-                expect(result).to.exist;
-                expect(result).to.have.property('a', 1);
-                expect(result).to.have.property('b', 2);
-                expect(client.topology.isDestroyed()).to.be.false;
-                done();
-              });
-            });
-          });
-        });
-      })
-    );
   });
 });

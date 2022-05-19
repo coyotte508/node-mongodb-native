@@ -12,7 +12,7 @@ declare global {
       topology?: TopologyTypeRequirement;
       mongodb?: string;
       os?: NodeJS.Platform | `!${NodeJS.Platform}`;
-      apiVersion?: '1';
+      apiVersion?: '1' | boolean;
       clientSideEncryption?: boolean;
       serverless?: 'forbid' | 'allow' | 'require';
       auth?: 'enabled' | 'disabled';

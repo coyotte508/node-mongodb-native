@@ -18,7 +18,7 @@ function dumpSessionInfo(which, sessions) {
   sessions.forEach(session => {
     console.warn(` >> ${JSON.stringify(session.id)}`);
     if (session[kTrace]) {
-      console.warn(session[kTrace]);
+      console.warn(session.currentTest, session[kTrace]);
     }
   });
 }
@@ -35,10 +35,13 @@ const sessionLeakCheckBeforeEach = function () {
     return;
   }
 
+  const title = this.currentTest.fullTitle();
+
   const _startSession = Topology.prototype.startSession;
   sandbox.stub(Topology.prototype, 'startSession').callsFake(function () {
     const session = _startSession.apply(this, arguments);
     const stackTrace = new Error().stack;
+    session.currentTest = title;
     const result = new Proxy(session, {
       get: function (target, prop) {
         if (prop === 'serverSession') {

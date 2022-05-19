@@ -50,7 +50,8 @@ function convertToConnStringMap(obj: Record<string, any>) {
 export class TestConfiguration {
   version: string;
   clientSideEncryption: Record<string, any>;
-  parameters: Record<string, any>;
+  /** null means topology does not support command (serverless) */
+  parameters: Record<string, any> | null;
   singleMongosLoadBalancerUri: string;
   multiMongosLoadBalancerUri: string;
   isServerless: boolean;
@@ -76,7 +77,7 @@ export class TestConfiguration {
     const hostAddresses = hosts.map(HostAddress.fromString);
     this.version = context.version;
     this.clientSideEncryption = context.clientSideEncryption;
-    this.parameters = undefined;
+    this.parameters = null;
     this.singleMongosLoadBalancerUri = context.singleMongosLoadBalancerUri;
     this.multiMongosLoadBalancerUri = context.multiMongosLoadBalancerUri;
     this.isServerless = !!process.env.SERVERLESS;
